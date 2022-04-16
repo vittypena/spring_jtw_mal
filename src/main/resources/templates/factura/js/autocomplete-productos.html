@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+	<html xmlns:th="http://www.thymeleaf.org">
+	<body>
+		<script type="text/javascript" th:fragment="javascript">
+		//Nos aseguramos de que el documento html este completamente cargado con el metodo ready
+		$(document).ready(function(){
+			$("#buscar_producto").autocomplete({
+				//Recibe dos objetos
+				//El metodo source se encarga de hacer la peticion Ajax
+				//El metodo select se encarga de procesar el resultado y hacer algo con los resultados
+				source: function(request, response){	//muestra los datos a medida que vamos escribiendo
+					$.ajax({
+						url:"/factura/cargar-productos/" + request.term,	//es el mapping url para el handler que busca parametros
+						dataType: "json",
+						data: {
+							term:request.term	//Es el termino que estamos introduciendo
+						},
+						success: function(data){			//Recibe los datos
+							response($.map(data, function(item){	//Para pasarlo al autocomplete usamos el responde
+								return {		//Por cada item va a retornar el id del producto a traves del item, el label y el precio
+									value: item.id,
+									label: item.nombre,
+									precio: item.precio,
+								};
+							}));
+						},
+					});
+				},
+				select: function(event, ui){	//Se encarga de seleccionar ese valor y hacer alguna tarea
+					$("#buscar_producto").val(ui.item.label);  //Pone la seleccion en el campo
+					
+					if(itemsHelper.hasProducto(ui.item.value)){
+						itemsHelper.incrementaCantidad(ui.item.value, ui.item.precio);
+						return false;
+					}
+					
+					var linea =$("#plantillaItemsFactura").html();		//Llamamos a la plantilla para ir completando la otra tabla de item_factura
+					
+					linea= linea.replace(/{ID}/g, ui.item.value);		//Reemplazamos los valores
+					linea= linea.replace(/{NOMBRE}/g, ui.item.label);
+					linea= linea.replace(/{PRECIO}/g, ui.item.precio);
+					
+					//Ahora cargamos estos valores en la tabla cargar_productos donde los acabaremos usando para crear el item_factura
+					$("#cargarItemProductos tbody").append(linea);
+					itemsHelper.calcularImporte(ui.item.value, ui.item.precio, 1)	//Le pasamos el id con ui.item.value y el precio con lo otro
+					
+					return false;
+				},
+				focus: function(event, ui){		//Para que si nos movemos de las flechas no salga el id
+				    event.preventDefault();
+				    $('input[name="buscar_producto"]').val(ui.item.label);				    
+				},
+			});
+			$("form").submit(function(){
+				$("#plantillaItemsFactura").remove();
+				return;
+			});
+		});
+		
+		var itemsHelper = {
+				calcularImporte: function(id, precio, cantidad){
+					$("#total_importe_" + id).html(parseInt(precio) * parseInt(cantidad));	//Tenemos esta variable en la plantilla en el span y con html agregamos contenido, en este caso la cantidad.
+					this.calcularGranTotal();
+				},
+				hasProducto: function(id){		//Busca linea por linea si existe el ID del producto
+					var resultado = false;
+					$('input[name="item_id[]"]').each(function(){
+						if(parseInt(id) == parseInt($(this).val()) ){
+							resultado = true;
+						}
+					});
+					return resultado;	
+				},
+				incrementaCantidad: function(id, precio){
+					var cantidad = $("#cantidad_" + id).val() ? parseInt($("#cantidad_" + id).val()) : 0;
+					$("#cantidad_" + id).val(++cantidad);
+					this.calcularImporte(id, precio, cantidad)
+				},
+				eliminarLineaFactura: function(id){
+					$("#row_" + id).remove();
+					this.calcularGranTotal();
+				}, 
+				calcularGranTotal: function(){
+					var total = 0;
+					$('span[id^="total_importe_"]').each(function(){
+						total += parseInt($(this).html());
+					});
+					$('#gran_total').html(total);
+				}
+		}
+		</script>
+	</body>
+	</html>
